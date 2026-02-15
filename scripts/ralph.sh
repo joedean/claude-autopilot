@@ -1,0 +1,110 @@
+#!/bin/bash
+# ralph.sh — Autonomous Claude Code loop with fresh context per iteration
+# Based on the Ralph Wiggum technique by Geoffrey Huntley
+# Uses fresh context windows (not the plugin approach) to avoid context bloat
+#
+# Usage: ./ralph.sh [max_iterations] [project_dir]
+#   max_iterations: default 20
+#   project_dir: default current directory
+
+set -e
+
+MAX_ITERATIONS=${1:-20}
+PROJECT_DIR=${2:-$(pwd)}
+PROMPT_FILE="$PROJECT_DIR/PROMPT.md"
+ACTIVITY_FILE="$PROJECT_DIR/activity.md"
+COMPLETION_MARKER="<promise>COMPLETE</promise>"
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# --- Validation ---
+if [ ! -f "$PROMPT_FILE" ]; then
+    echo -e "${RED}Error: PROMPT.md not found in $PROJECT_DIR${NC}"
+    echo "Create a PROMPT.md with your task instructions first."
+    echo "See templates/PROMPT.md for a starting point."
+    exit 1
+fi
+
+cd "$PROJECT_DIR"
+
+echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║         Ralph Loop Starting                  ║${NC}"
+echo -e "${GREEN}║  Max iterations: $(printf '%-25s' "$MAX_ITERATIONS")║${NC}"
+echo -e "${GREEN}║  Project: $(printf '%-34s' "$(basename "$PROJECT_DIR")")║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+
+ITERATION=0
+START_TIME=$(date +%s)
+
+while [ $ITERATION -lt $MAX_ITERATIONS ]; do
+    ITERATION=$((ITERATION + 1))
+    ITER_START=$(date +%s)
+
+    echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Iteration $ITERATION / $MAX_ITERATIONS — $(date '+%Y-%m-%d %H:%M:%S')${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    # Log iteration start
+    echo -e "\n---\n### Iteration $ITERATION — $(date '+%Y-%m-%d %H:%M:%S')\n" >> "$ACTIVITY_FILE"
+
+    # Run Claude Code with the prompt in a fresh context
+    # Using -p (print/headless mode) for non-interactive execution
+    OUTPUT=$(claude -p "$(cat "$PROMPT_FILE")" \
+        --output-format text \
+        --max-turns 50 \
+        2>&1) || true
+
+    # Log output summary (first 500 chars)
+    echo "**Output summary:**" >> "$ACTIVITY_FILE"
+    echo '```' >> "$ACTIVITY_FILE"
+    echo "$OUTPUT" | head -50 >> "$ACTIVITY_FILE"
+    echo '```' >> "$ACTIVITY_FILE"
+
+    # Check for completion
+    if echo "$OUTPUT" | grep -q "$COMPLETION_MARKER"; then
+        ELAPSED=$(( $(date +%s) - START_TIME ))
+        echo -e "\n${GREEN}╔══════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║  ✅ COMPLETE after $ITERATION iterations        ${NC}"
+        echo -e "${GREEN}║  Total time: $((ELAPSED / 60))m $((ELAPSED % 60))s               ${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+
+        echo -e "\n## ✅ COMPLETED — $(date '+%Y-%m-%d %H:%M:%S')" >> "$ACTIVITY_FILE"
+        echo "Iterations: $ITERATION | Time: $((ELAPSED / 60))m $((ELAPSED % 60))s" >> "$ACTIVITY_FILE"
+
+        # Auto-commit completion
+        git add -A 2>/dev/null || true
+        git commit -m "ralph: completed after $ITERATION iterations" 2>/dev/null || true
+
+        exit 0
+    fi
+
+    # Auto-commit after each iteration
+    git add -A 2>/dev/null || true
+    git commit -m "ralph: iteration $ITERATION of $MAX_ITERATIONS" 2>/dev/null || true
+    git push 2>/dev/null || true
+
+    ITER_ELAPSED=$(( $(date +%s) - ITER_START ))
+    echo -e "${YELLOW}  Iteration $ITERATION completed in ${ITER_ELAPSED}s${NC}"
+
+    # Brief pause between iterations
+    sleep 2
+done
+
+# Max iterations reached
+ELAPSED=$(( $(date +%s) - START_TIME ))
+echo -e "\n${YELLOW}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║  ⚠️  Max iterations ($MAX_ITERATIONS) reached       ${NC}"
+echo -e "${YELLOW}║  Total time: $((ELAPSED / 60))m $((ELAPSED % 60))s               ${NC}"
+echo -e "${YELLOW}║  Check activity.md for progress              ║${NC}"
+echo -e "${YELLOW}╚══════════════════════════════════════════════╝${NC}"
+
+echo -e "\n## ⚠️ MAX ITERATIONS REACHED — $(date '+%Y-%m-%d %H:%M:%S')" >> "$ACTIVITY_FILE"
+echo "Iterations: $MAX_ITERATIONS | Time: $((ELAPSED / 60))m $((ELAPSED % 60))s" >> "$ACTIVITY_FILE"
+
+git add -A 2>/dev/null || true
+git commit -m "ralph: max iterations ($MAX_ITERATIONS) reached" 2>/dev/null || true
+git push 2>/dev/null || true
