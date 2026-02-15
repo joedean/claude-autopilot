@@ -71,6 +71,39 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$BRIDGE_LOG"
 }
 
+# Build a descriptive commit message from Claude's commits or changed files
+# Usage: bridge_commit_msg <prefix> <prev_head> <fallback_desc>
+bridge_commit_msg() {
+    local prefix="$1" prev_head="$2" fallback="$3"
+    local desc=""
+
+    # Check if Claude made commits during execution
+    if [ -n "$prev_head" ] && [ "$(git rev-parse HEAD 2>/dev/null)" != "$prev_head" ]; then
+        desc=$(git log --format='%s' -1 2>/dev/null)
+    fi
+
+    # Fall back to describing staged changes
+    if [ -z "$desc" ]; then
+        local changed
+        changed=$(git diff --cached --name-only 2>/dev/null | head -5)
+        if [ -n "$changed" ]; then
+            local count
+            count=$(echo "$changed" | wc -l | tr -d ' ')
+            desc="updates $(echo "$changed" | head -1 | xargs basename 2>/dev/null)"
+            if [ "$count" -gt 1 ]; then
+                desc="$desc (+$((count - 1)) more)"
+            fi
+        fi
+    fi
+
+    # Fall back to the raw task description
+    if [ -z "$desc" ]; then
+        desc="$fallback"
+    fi
+
+    echo "${prefix}: ${desc}"
+}
+
 process_command() {
     local COMMENT_BODY="$1"
     local COMMENT_AUTHOR="$2"
@@ -169,6 +202,9 @@ I'll post results when the team finishes. Check tmux panes on the server for liv
         gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
             -f content='rocket' --silent 2>/dev/null || true
 
+        # Snapshot HEAD to detect commits Claude makes
+        PREV_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+
         # Run Claude Code with team spawn instructions
         # The lead session coordinates; teammates spawn as tmux panes
         OUTPUT=$(claude -p "You are the team lead for this project in $(pwd).
@@ -204,7 +240,8 @@ Git status: $(git status --short 2>/dev/null)" \
 
         # Push any remaining changes
         git add -A 2>/dev/null || true
-        git commit -m "agent-team: ${TEAM_TASK}" 2>/dev/null || true
+        COMMIT_MSG=$(bridge_commit_msg "agent-team" "$PREV_HEAD" "$TEAM_TASK")
+        git commit -m "$COMMIT_MSG" 2>/dev/null || true
         git push 2>/dev/null || true
 
         # Truncate output for GitHub comment
@@ -267,6 +304,9 @@ This will take a while. I'll post results when complete."
         gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
             -f content='eyes' --silent 2>/dev/null || true
 
+        # Snapshot HEAD to detect commits Claude makes
+        PREV_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+
         OUTPUT=$(claude -p "You are the team lead running a full SDLC pipeline in $(pwd).
 Read CLAUDE.md for role definitions and project context.
 
@@ -305,7 +345,8 @@ Current branch: $(git branch --show-current 2>/dev/null)" \
             2>&1) || true
 
         git add -A 2>/dev/null || true
-        git commit -m "sdlc-pipeline: ${SDLC_TASK}" 2>/dev/null || true
+        COMMIT_MSG=$(bridge_commit_msg "sdlc-pipeline" "$PREV_HEAD" "$SDLC_TASK")
+        git commit -m "$COMMIT_MSG" 2>/dev/null || true
         git push 2>/dev/null || true
 
         TRUNCATED_OUTPUT=$(echo "$OUTPUT" | tail -80)
