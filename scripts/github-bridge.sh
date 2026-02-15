@@ -416,33 +416,52 @@ $TRUNCATED_OUTPUT
 
 # --- Main polling loop ---
 while true; do
-    # Fetch comments on the issue, ordered by creation date
-    COMMENTS=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?sort=created&direction=desc&per_page=5" \
-        --jq '.[] | {id: .id, body: .body, user: .user.login, created: .created_at}' \
+    # Fetch comments on the issue (ascending order so we process oldest-first)
+    COMMENTS_JSON=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?sort=created&direction=asc&per_page=20" \
         2>/dev/null) || {
         echo -e "${RED}  Failed to fetch comments. Retrying in ${POLL_INTERVAL}s...${NC}"
         sleep "$POLL_INTERVAL"
         continue
     }
 
-    # Get the latest comment
-    LATEST_ID=$(echo "$COMMENTS" | jq -r '.id' | head -1)
-    LATEST_AUTHOR=$(echo "$COMMENTS" | jq -r '.user' | head -1)
-    LATEST_BODY=$(echo "$COMMENTS" | jq -r '.body' | head -1)
+    COMMENT_COUNT=$(echo "$COMMENTS_JSON" | jq 'length')
+    FOUND_NEW=false
 
-    # Skip if no new comments, if it's a bridge response (has our marker), or already processed
-    if [ -n "$LATEST_ID" ] && \
-       [ "$LATEST_ID" != "$LAST_COMMENT_ID" ] && \
-       [[ "$LATEST_BODY" != *"$BRIDGE_MARKER"* ]] && \
-       [ -n "$LATEST_BODY" ]; then
+    for (( i=0; i<COMMENT_COUNT; i++ )); do
+        COMMENT_ID=$(echo "$COMMENTS_JSON" | jq -r ".[$i].id")
+        COMMENT_AUTHOR=$(echo "$COMMENTS_JSON" | jq -r ".[$i].user.login")
+        COMMENT_BODY=$(echo "$COMMENTS_JSON" | jq -r ".[$i].body")
 
-        # Process the command
-        process_command "$LATEST_BODY" "$LATEST_AUTHOR" "$LATEST_ID"
+        # Skip already-processed comments
+        if [ -n "$LAST_COMMENT_ID" ] && [ "$COMMENT_ID" -le "$LAST_COMMENT_ID" ] 2>/dev/null; then
+            continue
+        fi
+
+        # Skip bridge responses (contain our hidden marker)
+        if [[ "$COMMENT_BODY" == *"$BRIDGE_MARKER"* ]]; then
+            LAST_COMMENT_ID="$COMMENT_ID"
+            echo "$LAST_COMMENT_ID" > "$STATE_FILE"
+            continue
+        fi
+
+        # Skip empty comments
+        TRIMMED_BODY=$(echo "$COMMENT_BODY" | xargs)
+        if [ -z "$TRIMMED_BODY" ]; then
+            LAST_COMMENT_ID="$COMMENT_ID"
+            echo "$LAST_COMMENT_ID" > "$STATE_FILE"
+            continue
+        fi
+
+        # Process this command
+        FOUND_NEW=true
+        process_command "$COMMENT_BODY" "$COMMENT_AUTHOR" "$COMMENT_ID"
 
         # Update state
-        LAST_COMMENT_ID="$LATEST_ID"
+        LAST_COMMENT_ID="$COMMENT_ID"
         echo "$LAST_COMMENT_ID" > "$STATE_FILE"
-    else
+    done
+
+    if [ "$FOUND_NEW" = false ]; then
         echo -ne "${DIM}\r  Polling... $(date '+%H:%M:%S') — waiting for commands${NC}"
     fi
 
