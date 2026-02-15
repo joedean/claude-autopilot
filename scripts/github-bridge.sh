@@ -36,21 +36,21 @@ fi
 
 cd "$PROJECT_DIR"
 
-# Get the authenticated user to filter out our own comments
-MY_USERNAME=$(gh api user --jq '.login' 2>/dev/null || echo "claude-bot")
+# Marker prefix used to identify bridge responses (avoids processing our own replies)
+BRIDGE_MARKER="<!-- claude-bridge-response -->"
 
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     GitHub Command Channel Active            ║${NC}"
 echo -e "${GREEN}║  Repo: $(printf '%-37s' "$REPO")║${NC}"
 echo -e "${GREEN}║  Issue: #$(printf '%-35s' "$ISSUE_NUMBER")║${NC}"
 echo -e "${GREEN}║  Polling every ${POLL_INTERVAL}s                       ║${NC}"
-echo -e "${GREEN}║  Ignoring comments from: $(printf '%-19s' "$MY_USERNAME")║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo -e "${DIM}Comment on issue #$ISSUE_NUMBER to send commands to Claude Code${NC}"
 echo -e "${DIM}Special commands: STATUS, STOP, BRANCH, PR, RALPH, TEAM, SDLC${NC}"
 
 # Post initial status comment
-gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🤖 **Claude Code bridge is now active.**
+gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🤖 **Claude Code bridge is now active.**
 
 I'm watching this issue for commands. Comment here and I'll execute your instructions.
 
@@ -99,13 +99,15 @@ $(git log --oneline -5 2>/dev/null || echo 'none')
 \`\`\`
 $(git status --short 2>/dev/null || echo 'clean')
 \`\`\`"
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "$STATUS_MSG"
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+$STATUS_MSG"
         return
     fi
 
     # STOP
     if [[ "${COMMENT_BODY^^}" == "STOP" ]]; then
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🛑 **Bridge stopping.** Final state: \`$(git branch --show-current)\` — \`$(git log --oneline -1 2>/dev/null)\`"
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🛑 **Bridge stopping.** Final state: \`$(git branch --show-current)\` — \`$(git log --oneline -1 2>/dev/null)\`"
         echo -e "${RED}Stop command received. Exiting.${NC}"
         exit 0
     fi
@@ -115,7 +117,8 @@ $(git status --short 2>/dev/null || echo 'clean')
         BRANCH_NAME=$(echo "$COMMENT_BODY" | awk '{print $2}')
         git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME" 2>/dev/null
         git push -u origin "$BRANCH_NAME" 2>/dev/null || true
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🌿 Switched to branch \`$BRANCH_NAME\`"
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🌿 Switched to branch \`$BRANCH_NAME\`"
         return
     fi
 
@@ -129,7 +132,8 @@ $(git status --short 2>/dev/null || echo 'clean')
 ## Recent commits
 $(git log --oneline main..$CURRENT_BRANCH 2>/dev/null || git log --oneline -10)" \
             2>&1) || PR_URL="Failed to create PR: $PR_URL"
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "📝 **Pull Request:** $PR_URL"
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+📝 **Pull Request:** $PR_URL"
         return
     fi
 
@@ -137,12 +141,14 @@ $(git log --oneline main..$CURRENT_BRANCH 2>/dev/null || git log --oneline -10)"
     if [[ "${COMMENT_BODY^^}" == RALPH\ * ]]; then
         RALPH_ITERS=$(echo "$COMMENT_BODY" | awk '{print $2}')
         RALPH_ITERS=${RALPH_ITERS:-20}
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🔄 **Switching to Ralph mode** for $RALPH_ITERS iterations. Bridge will pause. Check \`activity.md\` for progress."
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🔄 **Switching to Ralph mode** for $RALPH_ITERS iterations. Bridge will pause. Check \`activity.md\` for progress."
 
         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
         "$SCRIPT_DIR/ralph.sh" "$RALPH_ITERS" "$PROJECT_DIR"
 
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "✅ **Ralph loop finished.** Bridge resuming. Check the latest commits for results."
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+✅ **Ralph loop finished.** Bridge resuming. Check the latest commits for results."
         return
     fi
 
@@ -151,7 +157,8 @@ $(git log --oneline main..$CURRENT_BRANCH 2>/dev/null || git log --oneline -10)"
     if [[ "${COMMENT_BODY^^}" == TEAM\ * ]]; then
         TEAM_TASK=$(echo "$COMMENT_BODY" | sed 's/^[Tt][Ee][Aa][Mm] //')
 
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🤝 **Spawning Agent Team** for: _${TEAM_TASK}_
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🤝 **Spawning Agent Team** for: _${TEAM_TASK}_
 
 Teammates will coordinate via shared task list and messaging.
 Roles: product-owner, solution-architect, clean-code-architect, performance-optimizer, security-hardening-architect, customer-value-qa
@@ -209,7 +216,8 @@ $TRUNCATED_OUTPUT"
         fi
 
         # Post results
-        REPLY="🤝 **Agent Team completed**
+        REPLY="${BRIDGE_MARKER}
+🤝 **Agent Team completed**
 
 **Mission:** ${TEAM_TASK}
 **Branch:** \`$(git branch --show-current)\`
@@ -243,7 +251,8 @@ $TRUNCATED_OUTPUT
     if [[ "${COMMENT_BODY^^}" == SDLC\ * ]]; then
         SDLC_TASK=$(echo "$COMMENT_BODY" | sed 's/^[Ss][Dd][Ll][Cc] //')
 
-        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "🏭 **Full SDLC Pipeline** starting for: _${SDLC_TASK}_
+        gh issue comment "$ISSUE_NUMBER" -R "$REPO" -b "${BRIDGE_MARKER}
+🏭 **Full SDLC Pipeline** starting for: _${SDLC_TASK}_
 
 Running your 6-agent pipeline sequentially:
 1. 📋 product-owner → requirements & acceptance criteria
@@ -306,7 +315,8 @@ Current branch: $(git branch --show-current 2>/dev/null)" \
 $TRUNCATED_OUTPUT"
         fi
 
-        REPLY="🏭 **SDLC Pipeline completed**
+        REPLY="${BRIDGE_MARKER}
+🏭 **SDLC Pipeline completed**
 
 **Feature:** ${SDLC_TASK}
 **Branch:** \`$(git branch --show-current)\`
@@ -379,7 +389,8 @@ $TRUNCATED_OUTPUT"
         -f content='rocket' --silent 2>/dev/null || true
 
     # Post result back to the issue
-    REPLY="✅ **Task completed**
+    REPLY="${BRIDGE_MARKER}
+✅ **Task completed**
 
 **Branch:** \`$(git branch --show-current)\`
 **Latest commit:** \`$(git log --oneline -1 2>/dev/null)\`
@@ -419,10 +430,10 @@ while true; do
     LATEST_AUTHOR=$(echo "$COMMENTS" | jq -r '.user' | head -1)
     LATEST_BODY=$(echo "$COMMENTS" | jq -r '.body' | head -1)
 
-    # Skip if no new comments, or if it's our own comment, or already processed
+    # Skip if no new comments, if it's a bridge response (has our marker), or already processed
     if [ -n "$LATEST_ID" ] && \
        [ "$LATEST_ID" != "$LAST_COMMENT_ID" ] && \
-       [ "$LATEST_AUTHOR" != "$MY_USERNAME" ] && \
+       [[ "$LATEST_BODY" != *"$BRIDGE_MARKER"* ]] && \
        [ -n "$LATEST_BODY" ]; then
 
         # Process the command
