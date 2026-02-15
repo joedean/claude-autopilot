@@ -53,10 +53,14 @@ while [ $ITERATION -lt $MAX_ITERATIONS ]; do
 
     # Run Claude Code with the prompt in a fresh context
     # Using -p (print/headless mode) for non-interactive execution
-    OUTPUT=$(claude -p "$(cat "$PROMPT_FILE")" \
+    # Stream output to terminal via tee so progress is visible in real time
+    ITER_OUTPUT_FILE=$(mktemp)
+    claude -p "$(cat "$PROMPT_FILE")" \
         --output-format text \
         --max-turns 50 \
-        2>&1) || true
+        2>&1 | tee "$ITER_OUTPUT_FILE" || true
+    OUTPUT=$(cat "$ITER_OUTPUT_FILE")
+    rm -f "$ITER_OUTPUT_FILE"
 
     # Log output summary (first 500 chars)
     echo "**Output summary:**" >> "$ACTIVITY_FILE"
