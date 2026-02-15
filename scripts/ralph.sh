@@ -40,6 +40,38 @@ echo -e "${GREEN}╚════════════════════
 ITERATION=0
 START_TIME=$(date +%s)
 
+# Build a descriptive commit message from Claude's commits or changed files
+# Usage: iter_commit_msg <iteration> <max_iterations> <suffix>
+iter_commit_msg() {
+    local iter="$1" max="$2" suffix="$3"
+    local desc=""
+
+    # Check if Claude made commits during this iteration
+    if [ -n "$PREV_HEAD" ] && [ "$(git rev-parse HEAD 2>/dev/null)" != "$PREV_HEAD" ]; then
+        desc=$(git log --format='%s' -1 2>/dev/null)
+    fi
+
+    # Fall back to describing staged changes
+    if [ -z "$desc" ]; then
+        local changed
+        changed=$(git diff --cached --name-only 2>/dev/null | head -5)
+        if [ -n "$changed" ]; then
+            local count
+            count=$(echo "$changed" | wc -l | tr -d ' ')
+            desc="updates $(echo "$changed" | head -1 | xargs basename 2>/dev/null)"
+            if [ "$count" -gt 1 ]; then
+                desc="$desc (+$((count - 1)) more)"
+            fi
+        fi
+    fi
+
+    if [ -n "$desc" ]; then
+        echo "Ralph:${iter}/${max}${suffix} - ${desc}"
+    else
+        echo "Ralph:${iter}/${max}${suffix}"
+    fi
+}
+
 while [ $ITERATION -lt $MAX_ITERATIONS ]; do
     ITERATION=$((ITERATION + 1))
     ITER_START=$(date +%s)
@@ -50,6 +82,9 @@ while [ $ITERATION -lt $MAX_ITERATIONS ]; do
 
     # Log iteration start
     echo -e "\n---\n### Iteration $ITERATION — $(date '+%Y-%m-%d %H:%M:%S')\n" >> "$ACTIVITY_FILE"
+
+    # Snapshot HEAD so we can detect commits Claude makes
+    PREV_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
 
     # Run Claude Code with the prompt in a fresh context
     # Using -p (print/headless mode) for non-interactive execution
@@ -81,14 +116,16 @@ while [ $ITERATION -lt $MAX_ITERATIONS ]; do
 
         # Auto-commit completion
         git add -A 2>/dev/null || true
-        git commit -m "ralph: completed after $ITERATION iterations" 2>/dev/null || true
+        COMMIT_MSG=$(iter_commit_msg "$ITERATION" "$MAX_ITERATIONS" " COMPLETE")
+        git commit -m "$COMMIT_MSG" 2>/dev/null || true
 
         exit 0
     fi
 
     # Auto-commit after each iteration
     git add -A 2>/dev/null || true
-    git commit -m "ralph: iteration $ITERATION of $MAX_ITERATIONS" 2>/dev/null || true
+    COMMIT_MSG=$(iter_commit_msg "$ITERATION" "$MAX_ITERATIONS" "")
+    git commit -m "$COMMIT_MSG" 2>/dev/null || true
     git push 2>/dev/null || true
 
     ITER_ELAPSED=$(( $(date +%s) - ITER_START ))
@@ -110,5 +147,6 @@ echo -e "\n## ⚠️ MAX ITERATIONS REACHED — $(date '+%Y-%m-%d %H:%M:%S')" >>
 echo "Iterations: $MAX_ITERATIONS | Time: $((ELAPSED / 60))m $((ELAPSED % 60))s" >> "$ACTIVITY_FILE"
 
 git add -A 2>/dev/null || true
-git commit -m "ralph: max iterations ($MAX_ITERATIONS) reached" 2>/dev/null || true
+COMMIT_MSG=$(iter_commit_msg "$MAX_ITERATIONS" "$MAX_ITERATIONS" " max-reached")
+git commit -m "$COMMIT_MSG" 2>/dev/null || true
 git push 2>/dev/null || true
