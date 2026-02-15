@@ -1,0 +1,18 @@
+# Bridge state and logs
+.github-bridge-state
+.github-bridge.log
+
+# Activity logs (generated per-project)
+activity.md
+
+# Temp/working files
+tmp/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+
+# Node (if running in a target project)
+node_modules/

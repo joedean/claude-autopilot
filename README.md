@@ -12,7 +12,7 @@ All three modes are controlled from GitHub issue comments. Your phone is the com
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Digital Ocean Droplet                      │
+│                    Digital Ocean Droplet                     │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │              github-bridge.sh (tmux)                   │  │
@@ -23,25 +23,25 @@ All three modes are controlled from GitHub issue comments. Your phone is the com
 │  │  "Add retry logic"  → Claude Code single task          │  │
 │  │  "RALPH 20"         → Ralph autonomous loop (20 iter)  │  │
 │  │  "TEAM Build API"   → Agent Team (3-5 parallel agents) │  │
-│  │  "SDLC Add auth"    → Full 6-agent SDLC pipeline      │  │
+│  │  "SDLC Add auth"    → Full 6-agent SDLC pipeline       │  │
 │  │  "STATUS"           → Git status report                │  │
 │  │  "PR"               → Create pull request              │  │
-│  │  "BRANCH feat-x"   → Switch branch                    │  │
+│  │  "BRANCH feat-x"    → Switch branch                    │  │
 │  │  "STOP"             → Shut down bridge                 │  │
 │  └────────────────────────────────────────────────────────┘  │
 │                              │                               │
-│       ┌──────────────────────┼───────────────────┐          │
-│       ▼                      ▼                   ▼          │
-│  ┌──────────┐   ┌────────────────┐   ┌──────────────────┐  │
-│  │  Ralph   │   │  Single Claude │   │  Agent Team      │  │
-│  │  Loop    │   │  Code task     │   │  (tmux panes)    │  │
-│  │          │   │                │   │                   │  │
-│  │ Fresh    │   │ Execute +      │   │ Lead ──┬── Arch  │  │
-│  │ context  │   │ commit +       │   │        ├── Code  │  │
-│  │ each     │   │ reply to       │   │        ├── Test  │  │
-│  │ iteration│   │ GitHub         │   │        ├── Sec   │  │
-│  │          │   │                │   │        └── Perf  │  │
-│  └──────────┘   └────────────────┘   └──────────────────┘  │
+│       ┌──────────────────────┼───────────────────┐           │
+│       ▼                      ▼                   ▼           │
+│  ┌──────────┐   ┌────────────────┐   ┌──────────────────┐    │
+│  │  Ralph   │   │  Single Claude │   │  Agent Team      │    │
+│  │  Loop    │   │  Code task     │   │  (tmux panes)    │    │
+│  │          │   │                │   │                  │    │
+│  │ Fresh    │   │ Execute +      │   │ Lead ──┬── Arch  │    │
+│  │ context  │   │ commit +       │   │        ├── Code  │    │
+│  │ each     │   │ reply to       │   │        ├── Test  │    │
+│  │ iteration│   │ GitHub         │   │        ├── Sec   │    │
+│  │          │   │                │   │        └── Perf  │    │
+│  └──────────┘   └────────────────┘   └──────────────────┘    │
 └──────────────────────────────────────────────────────────────┘
          │                  │                    │
          └──────────────────┼────────────────────┘
