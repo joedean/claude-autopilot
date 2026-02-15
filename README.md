@@ -1,6 +1,6 @@
-# Hybrid Claude Code Workflow: Ralph + GitHub + Agent Teams
+# Claude Autopilot: Ralph + GitHub + Agent Teams
 
-A complete setup for running Claude Code on a Digital Ocean server with three modes:
+A complete setup for running Claude Code on a Digital Ocean Droplet with three modes:
 
 1. **Ralph Mode** — Autonomous bash loop for clear objectives (overnight builds, scaffolding)
 2. **GitHub Interactive Mode** — Steer Claude Code via GitHub issue comments from your phone
@@ -12,7 +12,7 @@ All three modes are controlled from GitHub issue comments. Your phone is the com
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     Digital Ocean Server                      │
+│                    Digital Ocean Droplet                      │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │              github-bridge.sh (tmux)                   │  │
@@ -55,29 +55,66 @@ All three modes are controlled from GitHub issue comments. Your phone is the com
 
 ## Quick Start
 
+Set up a fresh DO Droplet with a single command:
+
 ```bash
-# 1. Upload and extract on your DO server
-scp hybrid-workflow.tar.gz your-server:~/
-ssh your-server
-tar -xzf hybrid-workflow.tar.gz
-cd hybrid-workflow
+curl -sSL https://raw.githubusercontent.com/joedean/claude-autopilot/main/scripts/setup-do-droplet.sh | bash
+```
 
-# 2. Run one-time setup
-chmod +x scripts/*.sh
-./scripts/setup-do-server.sh
+This installs all dependencies (tmux, git, Node.js, GitHub CLI, Claude Code), prompts for your Anthropic API key and GitHub auth, and clones the repo to `~/claude-autopilot`.
 
-# 3. Initialize a project
+Then initialize your project and start the bridge:
+
+```bash
+# 1. Initialize a project
 cd ~/projects/my-app
-~/hybrid-workflow/scripts/workflow.sh init
+~/claude-autopilot/scripts/workflow.sh init
 
-# 4. Edit project files
+# 2. Edit project files
 vim CLAUDE.md      # Define agent roles, tech stack, project structure
 vim prd.md         # Define tasks and requirements
 
-# 5. Start the GitHub bridge
-~/hybrid-workflow/scripts/workflow.sh interactive youruser/my-app 42
+# 3. Start the GitHub bridge
+~/claude-autopilot/scripts/workflow.sh interactive youruser/my-app 42
 
-# 6. Comment on issue #42 from your phone!
+# 4. Comment on issue #42 from your phone!
+```
+
+## Integrating into an Existing Project
+
+Already have a project on your Droplet? Run `workflow.sh init` from your project directory:
+
+```bash
+cd ~/projects/my-existing-app
+~/claude-autopilot/scripts/workflow.sh init
+```
+
+This creates the following files (never overwrites existing ones):
+
+| File | Purpose |
+|---|---|
+| `CLAUDE.md` | Agent role definitions — auto-loaded by all teammates. **Customize this first.** |
+| `prd.md` | Product requirements with JSON task list for Ralph |
+| `PROMPT.md` | Instructions for each Ralph iteration |
+| `activity.md` | Auto-updated log of all work done |
+| `.claude/settings.json` | Agent teams enabled, permissions pre-approved for unattended operation |
+
+**What to customize:**
+
+- **CLAUDE.md** — Add your actual tech stack, project structure, build commands, and any project-specific conventions. All teammates read this automatically.
+- **prd.md** — Replace the template tasks with your real requirements. Each task needs `"passes": false` in the JSON array.
+- **PROMPT.md** — Update the build/test commands to match your project (e.g., `npm test`, `cargo build`, `pytest`).
+
+**Verify each mode works:**
+
+```bash
+# Test Ralph (1 iteration)
+~/claude-autopilot/scripts/workflow.sh ralph 1
+
+# Test interactive — start bridge, then comment "STATUS" on your issue
+~/claude-autopilot/scripts/workflow.sh interactive youruser/my-app 42
+
+# Test agent team — comment "TEAM Write a hello world test"
 ```
 
 ## The Three Modes
@@ -165,9 +202,9 @@ Comment: "SDLC Add JWT authentication with refresh tokens"
 ## File Structure
 
 ```
-hybrid-workflow/
+claude-autopilot/
 ├── scripts/
-│   ├── setup-do-server.sh      # One-time DO server setup
+│   ├── setup-do-droplet.sh    # One-time DO Droplet setup
 │   ├── workflow.sh              # Main orchestrator
 │   ├── ralph.sh                 # Autonomous bash loop
 │   └── github-bridge.sh        # GitHub ↔ Claude Code bridge
@@ -230,11 +267,11 @@ and `RALPH` for routine work.
    configured). Each teammate gets its own pane. SSH in and use
    `tmux list-panes` to see them.
 
-## Server Management
+## Droplet Management
 
 ```bash
 # Check what's running
-~/hybrid-workflow/scripts/workflow.sh status
+~/claude-autopilot/scripts/workflow.sh status
 
 # Attach to see live output
 tmux attach -t interactive-session
@@ -242,7 +279,7 @@ tmux attach -t interactive-session
 # Detach without stopping: Ctrl+b, then d
 
 # Stop everything
-~/hybrid-workflow/scripts/workflow.sh stop all
+~/claude-autopilot/scripts/workflow.sh stop all
 
 # View agent team panes (while a team is running)
 tmux list-panes
@@ -263,3 +300,7 @@ git log --oneline -20
   teammates are working correctly.
 - **Pre-approve all permissions** — the #1 failure mode is teammates stalling
   on permission prompts.
+- **Integrating into an existing project?** — Run `workflow.sh init` from your
+  project directory. It only creates files that don't already exist.
+- **Add to your PATH** — `export PATH="$HOME/claude-autopilot/scripts:$PATH"`
+  in your `.bashrc` so you can run `workflow.sh` from anywhere.

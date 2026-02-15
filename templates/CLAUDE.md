@@ -2,7 +2,7 @@
 
 ## Project Overview
 <!-- Customize this for your project -->
-This project uses the hybrid Claude Code workflow with three modes:
+This project uses the Claude Autopilot workflow with three modes:
 Ralph (autonomous loops), GitHub interactive (comment-driven), and Agent Teams (parallel coordination).
 
 ## Agent Team Roles

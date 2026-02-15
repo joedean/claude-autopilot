@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup-do-server.sh — One-time setup for Digital Ocean server
+# setup-do-droplet.sh — One-time setup for a Digital Ocean Droplet
 # Run this once on a fresh Ubuntu droplet
 
 set -e
@@ -9,17 +9,20 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+REPO_URL="https://github.com/joedean/claude-autopilot.git"
+INSTALL_DIR="$HOME/claude-autopilot"
+
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Hybrid Claude Code Workflow - Server Setup  ║${NC}"
+echo -e "${GREEN}║   Claude Autopilot - DO Droplet Setup        ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 
 # --- System packages ---
-echo -e "\n${YELLOW}[1/6] Installing system packages...${NC}"
+echo -e "\n${YELLOW}[1/7] Installing system packages...${NC}"
 sudo apt-get update -qq
 sudo apt-get install -y -qq tmux git curl jq
 
 # --- Node.js (if not installed) ---
-echo -e "\n${YELLOW}[2/6] Checking Node.js...${NC}"
+echo -e "\n${YELLOW}[2/7] Checking Node.js...${NC}"
 if ! command -v node &> /dev/null; then
     echo "Installing Node.js 20..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -29,7 +32,7 @@ else
 fi
 
 # --- GitHub CLI ---
-echo -e "\n${YELLOW}[3/6] Checking GitHub CLI...${NC}"
+echo -e "\n${YELLOW}[3/7] Checking GitHub CLI...${NC}"
 if ! command -v gh &> /dev/null; then
     echo "Installing GitHub CLI..."
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -41,7 +44,7 @@ else
 fi
 
 # --- Claude Code ---
-echo -e "\n${YELLOW}[4/6] Checking Claude Code...${NC}"
+echo -e "\n${YELLOW}[4/7] Checking Claude Code...${NC}"
 if ! command -v claude &> /dev/null; then
     echo "Installing Claude Code..."
     npm install -g @anthropic-ai/claude-code
@@ -50,7 +53,7 @@ else
 fi
 
 # --- API Key ---
-echo -e "\n${YELLOW}[5/6] Checking Anthropic API Key...${NC}"
+echo -e "\n${YELLOW}[5/7] Checking Anthropic API Key...${NC}"
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo -e "${RED}ANTHROPIC_API_KEY not set!${NC}"
     read -p "Enter your Anthropic API key: " api_key
@@ -62,7 +65,7 @@ else
 fi
 
 # --- GitHub Auth ---
-echo -e "\n${YELLOW}[6/6] Checking GitHub authentication...${NC}"
+echo -e "\n${YELLOW}[6/7] Checking GitHub authentication...${NC}"
 if ! gh auth status &> /dev/null 2>&1; then
     echo -e "${YELLOW}GitHub CLI not authenticated. Running gh auth login...${NC}"
     gh auth login
@@ -85,9 +88,18 @@ fi
 # --- Create workspace ---
 mkdir -p ~/projects
 
+# --- Clone or update repo ---
+echo -e "\n${YELLOW}[7/7] Setting up claude-autopilot...${NC}"
+if [ -d "$INSTALL_DIR/.git" ]; then
+    echo "Updating existing clone..."
+    git -C "$INSTALL_DIR" pull
+else
+    echo "Cloning claude-autopilot..."
+    git clone "$REPO_URL" "$INSTALL_DIR"
+fi
+
 # --- Make scripts executable ---
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-chmod +x "$SCRIPT_DIR"/*.sh
+chmod +x "$INSTALL_DIR/scripts/"*.sh
 
 echo -e "\n${GREEN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║              Setup Complete!                  ║${NC}"
@@ -95,9 +107,9 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "Next steps:"
 echo -e "  1. cd ~/projects/my-project"
-echo -e "  2. $SCRIPT_DIR/workflow.sh init"
+echo -e "  2. ~/claude-autopilot/scripts/workflow.sh init"
 echo -e "  3. Edit prd.md with your requirements"
-echo -e "  4. $SCRIPT_DIR/workflow.sh ralph 20"
+echo -e "  4. ~/claude-autopilot/scripts/workflow.sh ralph 20"
 echo -e ""
 echo -e "Or for interactive mode:"
-echo -e "  $SCRIPT_DIR/workflow.sh interactive owner/repo ISSUE_NUMBER"
+echo -e "  ~/claude-autopilot/scripts/workflow.sh interactive owner/repo ISSUE_NUMBER"

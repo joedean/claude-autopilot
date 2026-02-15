@@ -1,9 +1,9 @@
 #!/bin/bash
-# workflow.sh — Main orchestrator for the hybrid Claude Code workflow
+# workflow.sh — Main orchestrator for the Claude Autopilot workflow
 # Manages tmux sessions for Ralph and Interactive modes
 #
 # Usage:
-#   ./workflow.sh init                              — Initialize project for hybrid workflow
+#   ./workflow.sh init                              — Initialize project for claude-autopilot
 #   ./workflow.sh ralph [iterations] [project_dir]  — Start Ralph in tmux
 #   ./workflow.sh interactive <repo> <issue> [dir]  — Start GitHub bridge in tmux
 #   ./workflow.sh stop [ralph|interactive|all]      — Stop sessions
@@ -24,7 +24,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 usage() {
-    echo -e "${CYAN}Hybrid Claude Code Workflow${NC}"
+    echo -e "${CYAN}Claude Autopilot${NC}"
     echo ""
     echo "Usage:"
     echo "  $(basename "$0") init                                  — Initialize project"
@@ -45,7 +45,7 @@ usage() {
 # --- INIT ---
 cmd_init() {
     PROJECT_DIR=${1:-$(pwd)}
-    echo -e "${GREEN}Initializing hybrid workflow in $PROJECT_DIR${NC}"
+    echo -e "${GREEN}Initializing claude-autopilot in $PROJECT_DIR${NC}"
 
     # Create directories
     mkdir -p "$PROJECT_DIR/.claude/commands"
@@ -92,7 +92,7 @@ cmd_init() {
         cd "$PROJECT_DIR"
         git init
         git add -A
-        git commit -m "initial commit: hybrid workflow initialized"
+        git commit -m "initial commit: claude-autopilot initialized"
         echo -e "  ${GREEN}✓${NC} Git initialized with initial commit"
     fi
 

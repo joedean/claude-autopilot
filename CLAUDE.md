@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-This is **not an application** — it's an infrastructure toolkit of bash scripts and templates for running Claude Code autonomously on a Digital Ocean server. It provides three execution modes controlled via GitHub issue comments:
+This is **not an application** — it's an infrastructure toolkit of bash scripts and templates for running Claude Code autonomously on a Digital Ocean Droplet. It provides three execution modes controlled via GitHub issue comments:
 
 1. **Single task** — one-shot Claude Code execution from a comment
 2. **Ralph loop** (`ralph.sh`) — autonomous bash loop with fresh context per iteration, driven by a PRD task list
@@ -19,7 +19,7 @@ All scripts are in `scripts/` and are bash. They use `set -e` and expect `gh` (G
 | `workflow.sh` | Main orchestrator — `init`, `ralph`, `interactive`, `stop`, `status`, `attach`, `logs` subcommands |
 | `github-bridge.sh` | Polls a GitHub issue every 30s for new comments, dispatches to the right mode |
 | `ralph.sh` | Autonomous loop: reads `PROMPT.md`, runs `claude -p`, checks for `<promise>COMPLETE</promise>`, auto-commits each iteration |
-| `setup-do-server.sh` | One-time Ubuntu server setup (installs tmux, gh, node, claude-code) |
+| `setup-do-droplet.sh` | One-time DO Droplet setup (installs tmux, gh, node, claude-code) |
 
 ## Templates
 
