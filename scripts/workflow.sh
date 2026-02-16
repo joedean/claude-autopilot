@@ -14,14 +14,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Load shared functions and color variables
+. "$SCRIPT_DIR/common.sh"
+
 RALPH_SESSION="ralph-session"
 INTERACTIVE_SESSION="interactive-session"
-
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-NC='\033[0m'
 
 usage() {
     echo -e "${CYAN}Claude Autopilot${NC}"

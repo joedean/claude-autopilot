@@ -11,23 +11,55 @@
 
 set -e
 
+# Load shared functions and color variables
+. "$(dirname "$0")/common.sh"
+
 REPO=${1:?"Usage: ./github-bridge.sh <owner/repo> <issue_number> [project_dir] [poll_interval]"}
 ISSUE_NUMBER=${2:?"Usage: ./github-bridge.sh <owner/repo> <issue_number> [project_dir] [poll_interval]"}
 PROJECT_DIR=${3:-$(pwd)}
 POLL_INTERVAL=${4:-30}
-
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-DIM='\033[2m'
-NC='\033[0m'
 
 # Track the last processed comment ID to avoid duplicates
 LAST_COMMENT_ID=""
 STATE_FILE="$PROJECT_DIR/.github-bridge-state"
 ACTIVITY_FILE="$PROJECT_DIR/activity.md"
 BRIDGE_LOG="$PROJECT_DIR/.github-bridge.log"
+
+# --- Authorization ---
+# Authorized users can be set via:
+#   1. AUTHORIZED_USERS env var (comma-separated GitHub usernames)
+#   2. .github-bridge-authorized-users file (one username per line)
+# If neither is set, the bridge refuses to start (fail-closed).
+AUTHORIZED_USERS_FILE="$PROJECT_DIR/.github-bridge-authorized-users"
+AUTHORIZED_USERS_LIST=""
+
+if [ -n "${AUTHORIZED_USERS:-}" ]; then
+    AUTHORIZED_USERS_LIST="$AUTHORIZED_USERS"
+elif [ -f "$AUTHORIZED_USERS_FILE" ]; then
+    # Read file, strip comments and blank lines, join with commas
+    AUTHORIZED_USERS_LIST=$(grep -v '^\s*#' "$AUTHORIZED_USERS_FILE" | grep -v '^\s*$' | tr '\n' ',' | sed 's/,$//')
+fi
+
+if [ -z "$AUTHORIZED_USERS_LIST" ]; then
+    echo -e "${RED}Error: No authorized users configured.${NC}"
+    echo "Set AUTHORIZED_USERS env var (comma-separated) or create $AUTHORIZED_USERS_FILE (one per line)."
+    echo "Example: AUTHORIZED_USERS=myuser,coworker ./github-bridge.sh ..."
+    exit 1
+fi
+
+# Check if a GitHub username is authorized
+# Usage: is_authorized "username"
+is_authorized() {
+    local user="$1"
+    local IFS=','
+    for allowed in $AUTHORIZED_USERS_LIST; do
+        allowed=$(trim_whitespace "$allowed")
+        if [ "$user" = "$allowed" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 # Load last processed comment ID if state file exists
 if [ -f "$STATE_FILE" ]; then
@@ -44,6 +76,7 @@ echo -e "${GREEN}║$(printf '%-46s' "     GitHub Command Channel Active")║${N
 echo -e "${GREEN}║$(printf '%-46s' "  Repo: $REPO")║${NC}"
 echo -e "${GREEN}║$(printf '%-46s' "  Issue: #$ISSUE_NUMBER")║${NC}"
 echo -e "${GREEN}║$(printf '%-46s' "  Polling every ${POLL_INTERVAL}s")║${NC}"
+echo -e "${GREEN}║$(printf '%-46s' "  Authorized: $AUTHORIZED_USERS_LIST")║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo -e "${DIM}Comment on issue #$ISSUE_NUMBER to send commands to Claude Code${NC}"
 echo -e "${DIM}Special commands: STATUS, STOP, BRANCH, PR, RALPH, TEAM, SDLC${NC}"
@@ -75,26 +108,8 @@ log() {
 # Usage: bridge_commit_msg <prefix> <prev_head> <fallback_desc>
 bridge_commit_msg() {
     local prefix="$1" prev_head="$2" fallback="$3"
-    local desc=""
-
-    # Check if Claude made commits during execution
-    if [ -n "$prev_head" ] && [ "$(git rev-parse HEAD 2>/dev/null)" != "$prev_head" ]; then
-        desc=$(git log --format='%s' -1 2>/dev/null)
-    fi
-
-    # Fall back to describing staged changes
-    if [ -z "$desc" ]; then
-        local changed
-        changed=$(git diff --cached --name-only 2>/dev/null | head -5)
-        if [ -n "$changed" ]; then
-            local count
-            count=$(echo "$changed" | wc -l | tr -d ' ')
-            desc="updates $(echo "$changed" | head -1 | xargs basename 2>/dev/null)"
-            if [ "$count" -gt 1 ]; then
-                desc="$desc (+$((count - 1)) more)"
-            fi
-        fi
-    fi
+    local desc
+    desc=$(describe_changes "$prev_head")
 
     # Fall back to the raw task description
     if [ -z "$desc" ]; then
@@ -110,7 +125,7 @@ process_command() {
     local COMMENT_ID="$3"
 
     # Trim whitespace
-    COMMENT_BODY=$(echo "$COMMENT_BODY" | xargs)
+    COMMENT_BODY=$(trim_whitespace "$COMMENT_BODY")
 
     echo -e "\n${CYAN}━━━ New command from @$COMMENT_AUTHOR ━━━${NC}"
     echo -e "${CYAN}$COMMENT_BODY${NC}"
@@ -457,14 +472,18 @@ $TRUNCATED_OUTPUT
 
 # --- Main polling loop ---
 while true; do
-    # Fetch comments on the issue (ascending order so we process oldest-first)
-    COMMENTS_JSON=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?sort=created&direction=asc&per_page=20" \
+    # Fetch latest 100 comments descending, then reverse so we process oldest-first.
+    # Using descending + reverse ensures we always see the newest comments even on
+    # issues with hundreds of total comments (ascending would cap at first 100).
+    COMMENTS_JSON=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?sort=created&direction=desc&per_page=100" \
         2>/dev/null) || {
         echo -e "${RED}  Failed to fetch comments. Retrying in ${POLL_INTERVAL}s...${NC}"
         sleep "$POLL_INTERVAL"
         continue
     }
 
+    # Reverse array so oldest-first for sequential processing
+    COMMENTS_JSON=$(echo "$COMMENTS_JSON" | jq 'reverse')
     COMMENT_COUNT=$(echo "$COMMENTS_JSON" | jq 'length')
     FOUND_NEW=false
 
@@ -486,8 +505,17 @@ while true; do
         fi
 
         # Skip empty comments
-        TRIMMED_BODY=$(echo "$COMMENT_BODY" | xargs)
+        TRIMMED_BODY=$(trim_whitespace "$COMMENT_BODY")
         if [ -z "$TRIMMED_BODY" ]; then
+            LAST_COMMENT_ID="$COMMENT_ID"
+            echo "$LAST_COMMENT_ID" > "$STATE_FILE"
+            continue
+        fi
+
+        # Authorization check — reject commands from unauthorized users
+        if ! is_authorized "$COMMENT_AUTHOR"; then
+            echo -e "${RED}  Rejected command from unauthorized user: @$COMMENT_AUTHOR${NC}"
+            log "REJECTED command from unauthorized user @$COMMENT_AUTHOR: $COMMENT_BODY"
             LAST_COMMENT_ID="$COMMENT_ID"
             echo "$LAST_COMMENT_ID" > "$STATE_FILE"
             continue

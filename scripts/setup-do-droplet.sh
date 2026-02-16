@@ -4,10 +4,8 @@
 
 set -e
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Load shared functions and color variables
+. "$(dirname "$0")/common.sh"
 
 REPO_URL="https://github.com/joedean/claude-autopilot.git"
 INSTALL_DIR="$HOME/claude-autopilot"

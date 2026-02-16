@@ -9,17 +9,14 @@
 
 set -e
 
+# Load shared functions and color variables
+. "$(dirname "$0")/common.sh"
+
 MAX_ITERATIONS=${1:-20}
 PROJECT_DIR=${2:-$(pwd)}
 PROMPT_FILE="$PROJECT_DIR/PROMPT.md"
 ACTIVITY_FILE="$PROJECT_DIR/activity.md"
 COMPLETION_MARKER="<promise>COMPLETE</promise>"
-
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-NC='\033[0m'
 
 # --- Validation ---
 if [ ! -f "$PROMPT_FILE" ]; then
@@ -44,26 +41,8 @@ START_TIME=$(date +%s)
 # Usage: iter_commit_msg <iteration> <max_iterations> <suffix>
 iter_commit_msg() {
     local iter="$1" max="$2" suffix="$3"
-    local desc=""
-
-    # Check if Claude made commits during this iteration
-    if [ -n "$PREV_HEAD" ] && [ "$(git rev-parse HEAD 2>/dev/null)" != "$PREV_HEAD" ]; then
-        desc=$(git log --format='%s' -1 2>/dev/null)
-    fi
-
-    # Fall back to describing staged changes
-    if [ -z "$desc" ]; then
-        local changed
-        changed=$(git diff --cached --name-only 2>/dev/null | head -5)
-        if [ -n "$changed" ]; then
-            local count
-            count=$(echo "$changed" | wc -l | tr -d ' ')
-            desc="updates $(echo "$changed" | head -1 | xargs basename 2>/dev/null)"
-            if [ "$count" -gt 1 ]; then
-                desc="$desc (+$((count - 1)) more)"
-            fi
-        fi
-    fi
+    local desc
+    desc=$(describe_changes "$PREV_HEAD")
 
     if [ -n "$desc" ]; then
         echo "Ralph:${iter}/${max}${suffix} - ${desc}"
