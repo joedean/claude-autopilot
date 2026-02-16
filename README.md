@@ -74,10 +74,13 @@ cd ~/projects/my-app
 vim CLAUDE.md      # Define agent roles, tech stack, project structure
 vim prd.md         # Define tasks and requirements
 
-# 3. Start the GitHub bridge
+# 3. Configure authorized users (required — bridge won't start without this)
+echo "your-github-username" > .github-bridge-authorized-users
+
+# 4. Start the GitHub bridge
 ~/claude-autopilot/scripts/workflow.sh interactive youruser/my-app 42
 
-# 4. Comment on issue #42 from your phone!
+# 5. Comment on issue #42 from your phone!
 ```
 
 ## Integrating into an Existing Project
@@ -104,6 +107,7 @@ This creates the following files (never overwrites existing ones):
 - **CLAUDE.md** — Add your actual tech stack, project structure, build commands, and any project-specific conventions. All teammates read this automatically.
 - **prd.md** — Replace the template tasks with your real requirements. Each task needs `"passes": false` in the JSON array.
 - **PROMPT.md** — Update the build/test commands to match your project (e.g., `npm test`, `cargo build`, `pytest`).
+- **`.github-bridge-authorized-users`** — You must create this file (or set `AUTHORIZED_USERS` env var) before starting the bridge. See [Security](#security).
 
 **Verify each mode works:**
 
@@ -176,6 +180,47 @@ Comment: "SDLC Add JWT authentication with refresh tokens"
 | Overnight scaffolding | Ralph | Set and forget |
 | Iterative refinement from phone | Single task | You steer, Claude executes |
 
+## Security
+
+### Authorized Users (required)
+
+The GitHub bridge enforces comment-author authorization. **The bridge will refuse to start** if no authorized users are configured. This prevents arbitrary GitHub users from executing commands on your Droplet.
+
+Configure authorized users with **one** of these methods:
+
+**Option 1: File (recommended)** — create `.github-bridge-authorized-users` in your project directory:
+
+```
+# One GitHub username per line. Lines starting with # are comments.
+your-github-username
+trusted-coworker
+```
+
+**Option 2: Environment variable** — comma-separated GitHub usernames:
+
+```bash
+AUTHORIZED_USERS=your-github-username,trusted-coworker \
+  ~/claude-autopilot/scripts/workflow.sh interactive youruser/my-app 42
+```
+
+Comments from unauthorized users are silently rejected and logged. The bridge startup banner displays which users are authorized.
+
+### Permission Deny List
+
+`.claude/settings.json` includes a deny list that blocks dangerous operations from being run by Claude Code, even in unattended mode:
+
+| Category | Blocked commands |
+|---|---|
+| **Destructive filesystem** | `sudo`, `chmod 777`, `rm -rf /`, `rm -rf /*`, `rm -rf ~`, `rm -rf .` |
+| **Destructive git** | `git push --force`, `git push --force-with-lease`, `git push origin main*`, `git push origin master*`, `git reset --hard` |
+| **GitHub credential/admin** | `gh auth`, `gh repo delete`, `gh secret` |
+| **Arbitrary code execution** | `curl`, `python`, `python3`, `pip`, `pip3`, `docker`, `docker compose` |
+| **Process management** | `kill`, `pkill`, `killall` |
+
+The `gh` allow list is scoped to specific safe subcommands (`gh issue`, `gh pr`, `gh api repos`, `gh repo clone`, `gh repo view`) rather than a blanket `gh:*`.
+
+Review and customize `.claude/settings.json` for your use case. If your project requires any denied commands (e.g., `docker` for container-based projects), move them to the allow list deliberately.
+
 ## All GitHub Comment Commands
 
 | Command | Action |
@@ -197,14 +242,16 @@ Comment: "SDLC Add JWT authentication with refresh tokens"
 | `prd.md` | Product requirements with JSON task list for Ralph |
 | `PROMPT.md` | Instructions for each Ralph iteration |
 | `activity.md` | Auto-updated log of all work done |
-| `.claude/settings.json` | Agent teams enabled, permissions pre-approved for unattended operation |
+| `.claude/settings.json` | Agent teams enabled, permissions and deny list for unattended operation |
+| `.github-bridge-authorized-users` | **Required.** GitHub usernames allowed to send commands via the bridge |
 
 ## File Structure
 
 ```
 claude-autopilot/
 ├── scripts/
-│   ├── setup-do-droplet.sh    # One-time DO Droplet setup
+│   ├── common.sh                # Shared functions and colors (sourced by all scripts)
+│   ├── setup-do-droplet.sh      # One-time DO Droplet setup
 │   ├── workflow.sh              # Main orchestrator
 │   ├── ralph.sh                 # Autonomous bash loop
 │   └── github-bridge.sh        # GitHub ↔ Claude Code bridge
@@ -253,17 +300,25 @@ and `RALPH` for routine work.
 
 ### Critical Setup Notes
 
-1. **Permissions must be generous** — teammates stall on permission prompts
+1. **Configure authorized users first** — the bridge won't start without
+   `.github-bridge-authorized-users` or `AUTHORIZED_USERS` env var.
+   See [Security](#security).
+
+2. **Review the permission deny list** — `.claude/settings.json` blocks
+   dangerous commands (curl, docker, kill, force push, etc.) by default.
+   If your project needs any of these, move them to the allow list deliberately.
+
+3. **Permissions must be generous** — teammates stall on permission prompts
    with nobody to approve. The included settings.json pre-approves common
    operations.
 
-2. **CLAUDE.md is auto-loaded** — all teammates read it automatically.
+4. **CLAUDE.md is auto-loaded** — all teammates read it automatically.
    Put your tech stack, conventions, and role definitions there.
 
-3. **File ownership matters** — two teammates editing the same file = overwrites.
+5. **File ownership matters** — two teammates editing the same file = overwrites.
    The solution-architect defines boundaries at team creation.
 
-4. **tmux is the backend** — set `CLAUDE_CODE_SPAWN_BACKEND=tmux` (already
+6. **tmux is the backend** — set `CLAUDE_CODE_SPAWN_BACKEND=tmux` (already
    configured). Each teammate gets its own pane. SSH in and use
    `tmux list-panes` to see them.
 
@@ -298,8 +353,10 @@ git log --oneline -20
 - **Use BRANCH before TEAM/SDLC** — keep experimental work on feature branches.
 - **Monitor first TEAM run** — SSH in and watch the tmux panes to verify
   teammates are working correctly.
-- **Pre-approve all permissions** — the #1 failure mode is teammates stalling
-  on permission prompts.
+- **Configure authorized users** — the bridge requires this. Create
+  `.github-bridge-authorized-users` or set `AUTHORIZED_USERS` env var.
+- **Review `.claude/settings.json`** — the deny list blocks curl, docker,
+  python, and other commands by default. Adjust for your project needs.
 - **Integrating into an existing project?** — Run `workflow.sh init` from your
   project directory. It only creates files that don't already exist.
 - **Add to your PATH** — `export PATH="$HOME/claude-autopilot/scripts:$PATH"`
