@@ -121,6 +121,53 @@ This creates the following files (never overwrites existing ones):
 # Test agent team — comment "TEAM Write a hello world test"
 ```
 
+## Critical Setup Notes
+
+1. **Configure authorized users first** — the bridge won't start without
+   `.github-bridge-authorized-users` or `AUTHORIZED_USERS` env var.
+   See [Security](#security).
+
+2. **Review the permission deny list** — `.claude/settings.json` blocks
+   dangerous commands (curl, docker, kill, force push, etc.) by default.
+   If your project needs any of these, move them to the allow list deliberately.
+
+3. **Permissions must be generous** — teammates stall on permission prompts
+   with nobody to approve. The included settings.json pre-approves common
+   operations.
+
+4. **CLAUDE.md is auto-loaded** — all teammates read it automatically.
+   Put your tech stack, conventions, and role definitions there.
+
+5. **File ownership matters** — two teammates editing the same file = overwrites.
+   The solution-architect defines boundaries at team creation.
+
+6. **tmux is the backend** — set `CLAUDE_CODE_SPAWN_BACKEND=tmux` (already
+   configured). Each teammate gets its own pane. SSH in and use
+   `tmux list-panes` to see them.
+
+## Droplet Management
+
+```bash
+# Check what's running
+~/claude-autopilot/scripts/workflow.sh status
+
+# Attach to see live output
+tmux attach -t interactive-session
+
+# Detach without stopping: Ctrl+b, then d
+
+# Stop everything
+~/claude-autopilot/scripts/workflow.sh stop all
+
+# View agent team panes (while a team is running)
+tmux list-panes
+tmux select-pane -t 1   # switch to pane 1
+
+# Monitor activity
+tail -f activity.md
+git log --oneline -20
+```
+
 ## The Three Modes
 
 ### Mode 1: Single Task (default)
@@ -297,53 +344,6 @@ Agent Teams uses significantly more tokens than single-agent mode:
 
 Use `TEAM` and `SDLC` for work that justifies the cost. Use single tasks
 and `RALPH` for routine work.
-
-### Critical Setup Notes
-
-1. **Configure authorized users first** — the bridge won't start without
-   `.github-bridge-authorized-users` or `AUTHORIZED_USERS` env var.
-   See [Security](#security).
-
-2. **Review the permission deny list** — `.claude/settings.json` blocks
-   dangerous commands (curl, docker, kill, force push, etc.) by default.
-   If your project needs any of these, move them to the allow list deliberately.
-
-3. **Permissions must be generous** — teammates stall on permission prompts
-   with nobody to approve. The included settings.json pre-approves common
-   operations.
-
-4. **CLAUDE.md is auto-loaded** — all teammates read it automatically.
-   Put your tech stack, conventions, and role definitions there.
-
-5. **File ownership matters** — two teammates editing the same file = overwrites.
-   The solution-architect defines boundaries at team creation.
-
-6. **tmux is the backend** — set `CLAUDE_CODE_SPAWN_BACKEND=tmux` (already
-   configured). Each teammate gets its own pane. SSH in and use
-   `tmux list-panes` to see them.
-
-## Droplet Management
-
-```bash
-# Check what's running
-~/claude-autopilot/scripts/workflow.sh status
-
-# Attach to see live output
-tmux attach -t interactive-session
-
-# Detach without stopping: Ctrl+b, then d
-
-# Stop everything
-~/claude-autopilot/scripts/workflow.sh stop all
-
-# View agent team panes (while a team is running)
-tmux list-panes
-tmux select-pane -t 1   # switch to pane 1
-
-# Monitor activity
-tail -f activity.md
-git log --oneline -20
-```
 
 ## Tips
 
